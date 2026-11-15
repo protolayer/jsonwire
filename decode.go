@@ -350,12 +350,26 @@ func (d decoder) stringContent(raw jsontext.Value) (b []byte, owned bool, err er
 	return b, true, nil
 }
 
+// readStringValue reads the next JSON value, which must be a string. It does
+// not read a whole object or array before it reports the error, so that an
+// object or array that never ends cannot make it read without a limit.
+func (d decoder) readStringValue() (jsontext.Value, error) {
+	if kind := d.dec.PeekKind(); kind == kindObjectOpen || kind == kindArrayOpen {
+		tok, err := d.dec.ReadToken()
+		if err != nil {
+			return nil, err
+		}
+		return nil, d.unexpectedTokenError(tok)
+	}
+	return d.dec.ReadValue()
+}
+
 // readStringView reads the next JSON value, which must be a string, and
 // returns its unquoted value. The result can refer to decoder memory, so it is
 // valid only until the next read from the decoder. Use it for object names
 // and other short-lived values.
 func (d decoder) readStringView() (string, error) {
-	raw, err := d.dec.ReadValue()
+	raw, err := d.readStringValue()
 	if err != nil {
 		return "", err
 	}
@@ -369,7 +383,7 @@ func (d decoder) readStringView() (string, error) {
 // readString reads the next JSON value, which must be a string, and returns
 // its unquoted value. The result does not refer to decoder memory.
 func (d decoder) readString() (string, error) {
-	raw, err := d.dec.ReadValue()
+	raw, err := d.readStringValue()
 	if err != nil {
 		return "", err
 	}

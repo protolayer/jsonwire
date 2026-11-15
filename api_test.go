@@ -762,16 +762,15 @@ func TestExtensionWithoutRange(t *testing.T) {
 	}
 }
 
-// endlessArray is a reader that returns the start of a JSON array that never
-// ends.
-type endlessArray struct{ started bool }
+// endlessArray is a reader that returns prefix and then the start of a JSON
+// array that never ends.
+type endlessArray struct{ prefix string }
 
 func (r *endlessArray) Read(p []byte) (int, error) {
-	n := 0
-	if !r.started {
-		p[0] = '['
-		r.started = true
-		n = 1
+	n := copy(p, r.prefix)
+	r.prefix = r.prefix[n:]
+	if len(r.prefix) > 0 {
+		return n, nil
 	}
 	for n+2 <= len(p) {
 		p[n], p[n+1] = '1', ','
@@ -780,14 +779,13 @@ func (r *endlessArray) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// TestScalarRejectsContainerEarly checks that an object or array for a scalar
-// field is rejected at its first token. Before the fix, the decoder read the
-// whole value first, which never ends here.
-func TestScalarRejectsContainerEarly(t *testing.T) {
-	t.Parallel()
+// rejectsEarly checks that UnmarshalRead returns an error for the input from
+// r before it reads the whole array, which never ends.
+func rejectsEarly(t *testing.T, r io.Reader, m proto.Message) {
+	t.Helper()
 	done := make(chan error, 1)
 	go func() {
-		done <- jsonwire.UnmarshalRead(&endlessArray{}, new(wrapperspb.Int32Value))
+		done <- jsonwire.UnmarshalRead(r, m)
 	}()
 	select {
 	case err := <-done:
@@ -797,6 +795,23 @@ func TestScalarRejectsContainerEarly(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("UnmarshalRead read the whole array before it rejected the value")
 	}
+}
+
+// TestNameRejectsContainerEarly checks that an object or array in the place of
+// an object name is rejected at its first token.
+func TestNameRejectsContainerEarly(t *testing.T) {
+	t.Parallel()
+	for _, prefix := range []string{`{[`, `{"optionalInt32":1,[`, `{"mapStringString":{[`} {
+		rejectsEarly(t, &endlessArray{prefix: prefix}, new(testpb.TestAllTypesProto3))
+	}
+}
+
+// TestScalarRejectsContainerEarly checks that an object or array for a scalar
+// field is rejected at its first token. Before the fix, the decoder read the
+// whole value first, which never ends here.
+func TestScalarRejectsContainerEarly(t *testing.T) {
+	t.Parallel()
+	rejectsEarly(t, &endlessArray{prefix: "["}, new(wrapperspb.Int32Value))
 }
 
 func TestPackageFormat(t *testing.T) {
