@@ -243,9 +243,13 @@ func intString(raw string) (string, bool) {
 // parseInt returns the signed integer value of the given JSON number. It
 // returns false if the number is not an integer or does not fit in bitSize.
 func parseInt(raw string, bitSize int) (int64, bool) {
-	// Fast path for plain integers, which are the common case.
-	if n, err := strconv.ParseInt(raw, 10, bitSize); err == nil {
-		return n, true
+	// Fast path for plain integers, which are the common case. strconv never
+	// accepts a fraction or an exponent, so a number with one goes straight to
+	// intString. Then strconv does not allocate an error that is not used.
+	if isPlainInt(raw) {
+		if n, err := strconv.ParseInt(raw, 10, bitSize); err == nil {
+			return n, true
+		}
 	}
 	s, ok := intString(raw)
 	if !ok {
@@ -262,8 +266,10 @@ func parseInt(raw string, bitSize int) (int64, bool) {
 // returns false if the number is not an unsigned integer or does not fit in
 // bitSize.
 func parseUint(raw string, bitSize int) (uint64, bool) {
-	if n, err := strconv.ParseUint(raw, 10, bitSize); err == nil {
-		return n, true
+	if isPlainInt(raw) {
+		if n, err := strconv.ParseUint(raw, 10, bitSize); err == nil {
+			return n, true
+		}
 	}
 	s, ok := intString(raw)
 	if !ok {
@@ -274,4 +280,17 @@ func parseUint(raw string, bitSize int) (uint64, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+// isPlainInt reports whether the JSON number raw has no fraction and no
+// exponent.
+func isPlainInt(raw string) bool {
+	// A loop is faster than strings.ContainsAny for short numbers.
+	for i := range len(raw) {
+		switch raw[i] {
+		case '.', 'e', 'E':
+			return false
+		}
+	}
+	return true
 }
