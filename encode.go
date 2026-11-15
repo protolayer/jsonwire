@@ -542,7 +542,7 @@ func (e encoder) marshalField(fd protoreflect.FieldDescriptor, v protoreflect.Va
 	}
 	// Names from a descriptor are almost always valid UTF-8, but a dynamic
 	// descriptor can have any json_name. Check it like message data.
-	if err := e.writeNameChecked(name, string(fd.FullName())); err != nil {
+	if err := e.writeString(name, string(fd.FullName())); err != nil {
 		return err
 	}
 	return e.marshalValue(v, fd)
@@ -674,7 +674,7 @@ func (e encoder) marshalMap(mmap protoreflect.Map, fd protoreflect.FieldDescript
 func (e encoder) writeMapKey(k protoreflect.MapKey, kind protoreflect.Kind, fd protoreflect.FieldDescriptor) error {
 	switch kind {
 	case protoreflect.StringKind:
-		return e.writeNameChecked(k.String(), string(fd.FullName()))
+		return e.writeString(k.String(), string(fd.FullName()))
 	case protoreflect.BoolKind:
 		if k.Bool() {
 			return e.writeName("true")
@@ -746,19 +746,7 @@ func (e encoder) writeName(name string) error {
 	return e.enc.WriteToken(jsontext.String(name))
 }
 
-// writeNameChecked writes an object member name that comes from message data,
-// for example a map key.
-func (e encoder) writeNameChecked(name, field string) error {
-	if e.checkUTF8 && !utf8.ValidString(name) {
-		return invalidUTF8Error(field)
-	}
-	if err := e.enc.WriteToken(jsontext.String(name)); err != nil {
-		return wrapInvalidUTF8(err, name, field)
-	}
-	return nil
-}
-
-// writeString writes a string value from message data.
+// writeString writes a string value or an object name and checks UTF-8.
 func (e encoder) writeString(s, field string) error {
 	if e.checkUTF8 && !utf8.ValidString(s) {
 		return invalidUTF8Error(field)
