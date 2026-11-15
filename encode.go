@@ -324,10 +324,9 @@ type encodeScratch struct {
 	entries []mapEntry
 	// maxValue is the length of the largest value written with
 	// AvailableBuffer.
-	maxValue     int
-	addField     func(protoreflect.FieldDescriptor, protoreflect.Value) bool
-	addExtension func(protoreflect.FieldDescriptor, protoreflect.Value) bool
-	addEntry     func(protoreflect.MapKey, protoreflect.Value) bool
+	maxValue int
+	addField func(protoreflect.FieldDescriptor, protoreflect.Value) bool
+	addEntry func(protoreflect.MapKey, protoreflect.Value) bool
 }
 
 type fieldValue struct {
@@ -344,12 +343,6 @@ func newEncodeScratch() *encodeScratch {
 	s := new(encodeScratch)
 	s.addField = func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		s.fields = append(s.fields, fieldValue{fd: fd, v: v})
-		return true
-	}
-	s.addExtension = func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		if fd.IsExtension() {
-			s.fields = append(s.fields, fieldValue{fd: fd, v: v})
-		}
 		return true
 	}
 	s.addEntry = func(k protoreflect.MapKey, v protoreflect.Value) bool {
@@ -434,39 +427,65 @@ func (e encoder) marshalMessage(m protoreflect.Message, typeURL string) error {
 	return e.enc.WriteToken(jsontext.EndObject)
 }
 
-// marshalAllFields writes all fields of m, including unpopulated fields.
+// marshalAllFields writes all fields of m, including unpopulated fields. The
+// result is the same as with unpopulatedFieldRanger in protojson: Range gives
+// the populated fields and extensions, and each declared field for which Has
+// is false is added. The fields are written in the order of
+// compareFieldOrder.
+//
+// Do not write a declared field for which Has is true without Range. With a
+// dynamic message, Has can be true because an extension has the same number
+// as the declared field. Then Get returns the value of the extension.
 func (e encoder) marshalAllFields(m protoreflect.Message) error {
-	md := m.Descriptor()
 	skipNull := !e.opts.EmitUnpopulated
-	fds := md.Fields()
+	start := len(e.s.fields)
+	m.Range(e.s.addField)
+	end := len(e.s.fields)
+	defer func() {
+		clear(e.s.fields[start:end])
+		e.s.fields = e.s.fields[:start]
+	}()
+	slices.SortFunc(e.s.fields[start:end], compareFieldOrder)
+
+	// Merge the sorted populated fields with the unpopulated fields, which
+	// come in declaration order.
+	j := start
+	fds := m.Descriptor().Fields()
 	for i := range fds.Len() {
-		fd := fds.Get(i)
-		var v protoreflect.Value
-		switch {
-		case m.Has(fd):
-			v = m.Get(fd)
-		case fd.ContainingOneof() != nil:
-			// Unpopulated oneof fields, including proto3 optional fields, are
-			// never written.
-			continue
-		case fd.HasPresence():
-			if skipNull {
-				continue
+		// Write the populated fields that come before field i. Nested
+		// messages append to e.s.fields, which can move it, so read each
+		// entry from the current slice.
+		for ; j < end && !e.s.fields[j].fd.IsExtension() && e.s.fields[j].fd.Index() < i; j++ {
+			f := e.s.fields[j]
+			if err := e.marshalField(f.fd, f.v); err != nil {
+				return err
 			}
-			// An invalid value is written as null.
-		default:
+		}
+		fd := fds.Get(i)
+		if m.Has(fd) || fd.ContainingOneof() != nil {
+			// Range gave the populated fields. Unpopulated oneof fields,
+			// including proto3 optional fields, are never written.
+			continue
+		}
+		var v protoreflect.Value // an invalid value is written as null
+		if !fd.HasPresence() {
 			v = m.Get(fd)
+		} else if skipNull {
+			continue
 		}
 		if err := e.marshalField(fd, v); err != nil {
 			return err
 		}
 	}
-	// Always look for extensions. A dynamic message can hold an extension
-	// even if its descriptor has no extension ranges, for example when the
-	// extension comes from a newer version of the file.
-	start := len(e.s.fields)
-	m.Range(e.s.addExtension)
-	return e.marshalFieldValues(start)
+	// Write the rest: populated fields after the last declared field, which
+	// cannot occur, and extensions.
+	for ; j < end; j++ {
+		f := e.s.fields[j]
+		if err := e.marshalField(f.fd, f.v); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // marshalPopulatedFields writes the populated fields of m. Range visits only
