@@ -461,9 +461,9 @@ func (e encoder) marshalAllFields(m protoreflect.Message) error {
 			return err
 		}
 	}
-	if md.ExtensionRanges().Len() == 0 {
-		return nil
-	}
+	// Always look for extensions. A dynamic message can hold an extension
+	// even if its descriptor has no extension ranges, for example when the
+	// extension comes from a newer version of the file.
 	start := len(e.s.fields)
 	m.Range(e.s.addExtension)
 	return e.marshalFieldValues(start)

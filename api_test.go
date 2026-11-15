@@ -658,6 +658,75 @@ func TestDescriptorNamesAreChecked(t *testing.T) {
 	}
 }
 
+// TestExtensionWithoutRange checks a dynamic message that holds an extension,
+// but whose descriptor has no extension ranges. This occurs when the extension
+// comes from a newer version of the file than the message descriptor:
+// dynamicpb compares only the name of the extended message.
+func TestExtensionWithoutRange(t *testing.T) {
+	t.Parallel()
+	newFile := func(withExtension bool) protoreflect.FileDescriptor {
+		t.Helper()
+		msg := &descriptorpb.DescriptorProto{
+			Name: proto.String("M"),
+			Field: []*descriptorpb.FieldDescriptorProto{{
+				Name:   proto.String("a"),
+				Number: proto.Int32(1),
+				Type:   descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum(),
+				Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+			}},
+		}
+		fdp := &descriptorpb.FileDescriptorProto{
+			Name:        proto.String("skew.proto"),
+			Package:     proto.String("skew"),
+			Syntax:      proto.String("proto2"),
+			MessageType: []*descriptorpb.DescriptorProto{msg},
+		}
+		if withExtension {
+			msg.ExtensionRange = []*descriptorpb.DescriptorProto_ExtensionRange{{
+				Start: proto.Int32(100),
+				End:   proto.Int32(200),
+			}}
+			fdp.Extension = []*descriptorpb.FieldDescriptorProto{{
+				Name:     proto.String("e"),
+				Number:   proto.Int32(100),
+				Extendee: proto.String(".skew.M"),
+				Type:     descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum(),
+				Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+			}}
+		}
+		fd, err := protodesc.NewFile(fdp, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fd
+	}
+	m := dynamicpb.NewMessage(newFile(false).Messages().Get(0))
+	xt := dynamicpb.NewExtensionType(newFile(true).Extensions().Get(0))
+	m.Set(xt.TypeDescriptor(), protoreflect.ValueOfInt32(7))
+
+	for _, c := range []struct {
+		name     string
+		protoOpt protojson.MarshalOptions
+		wireOpt  jsonwire.MarshalOptions
+	}{
+		{"default", protojson.MarshalOptions{}, jsonwire.MarshalOptions{}},
+		{"EmitUnpopulated", protojson.MarshalOptions{EmitUnpopulated: true}, jsonwire.MarshalOptions{EmitUnpopulated: true}},
+		{"EmitDefaultValues", protojson.MarshalOptions{EmitDefaultValues: true}, jsonwire.MarshalOptions{EmitDefaultValues: true}},
+	} {
+		want, err := c.protoOpt.Marshal(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := c.wireOpt.Marshal(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, testutil.Compact(t, want)) {
+			t.Errorf("%s: got %s, want %s", c.name, got, testutil.Compact(t, want))
+		}
+	}
+}
+
 // endlessArray is a reader that returns the start of a JSON array that never
 // ends.
 type endlessArray struct{ started bool }
