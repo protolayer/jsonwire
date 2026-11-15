@@ -6,7 +6,7 @@ Compared with `protojson`:
 
 - **Unmarshal:** 31% to 37% faster, with 25% fewer allocations.
 - **Marshal:** 9% to 26% faster, with 2x to 4x fewer allocations.
-- **Faster for every message shape tested.** See [Other message shapes](#other-message-shapes).
+- **Faster for most message shapes tested.** Long text that is not ASCII is slower. See [Other message shapes](#other-message-shapes).
 - **With one option, a further 28% to 38%.** See [Tuning](#tuning).
 
 ## Why it is faster
@@ -53,8 +53,17 @@ To check that the results are not specific to one message, `BenchmarkShapes` mea
 | One 600 KB bytes field | -32% | -28% |
 | One 2 MB bytes field | -34% | -28% |
 | The large message as a dynamic message (`dynamicpb`) | -22% | -33% |
+| 1000 `Any` values that hold a `Duration` | -31% | -15% |
+| 10000 integers written as `123.0` (unmarshal only) | n/a | -39% |
+| One 1 MB string with many escape characters | -36% | **+11%** |
+| One 1 MB string of CJK text | **+37%** | **+35%** |
 
-`jsonwire` also allocates fewer bytes for each of these shapes. With all CPUs at the same time (`make bench-parallel`), the gains are 25% to 64% for marshal and 22% to 41% for unmarshal. Unmarshal gains least for strings with escape characters on one CPU, because both packages spend most of the time on the same unescaping work.
+`jsonwire` allocates fewer bytes for each of these shapes, except 2% more for unmarshal of the `Any` values. With all CPUs at the same time (`make bench-parallel`), the gains for the first eight shapes are 25% to 64% for marshal and 22% to 41% for unmarshal.
+
+Two shapes are slower:
+
+- **Text that is not ASCII.** `jsontext` checks UTF-8 one character at a time for characters outside ASCII. For short strings, the gains on the rest of the message hide this cost. For long text, `protojson` is faster. The cost is inside `jsontext`, and `jsonwire` cannot skip the check.
+- **Unmarshal of long strings with many escape characters.** Both packages spend most of the time on the same unescaping work, and `jsontext` is a little slower at it.
 
 ## Tuning
 
