@@ -124,15 +124,15 @@ func (o MarshalOptions) Marshal(m proto.Message) ([]byte, error) {
 }
 
 // MarshalAppend appends the ProtoJSON encoding of m to b and returns the
-// result.
+// result. On error, it returns nil, the same as protojson.
 func (o MarshalOptions) MarshalAppend(b []byte, m proto.Message) ([]byte, error) {
 	state, err := o.getEncodeState()
 	if err != nil {
-		return b, err
+		return nil, err
 	}
 	defer putEncodeState(state)
 	if err := o.marshalEncode(state.enc, m, state.scratch, false); err != nil {
-		return b, wrapError(err)
+		return nil, wrapError(err)
 	}
 	return append(b, bytes.TrimSuffix(state.buf.Bytes(), []byte("\n"))...), nil
 }

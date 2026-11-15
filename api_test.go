@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/protolayer/jsonwire"
@@ -582,6 +583,21 @@ func TestMarshalAppendAndFormat(t *testing.T) {
 	}
 	if string(got) != "prefix:"+string(want) {
 		t.Fatalf("MarshalAppend: got %s", got)
+	}
+	// On error, MarshalAppend returns nil, like protojson.
+	for _, c := range []struct {
+		indent string
+		m      proto.Message
+	}{
+		{"", wrapperspb.String("\xff")},
+		{"", &durationpb.Duration{Nanos: -1, Seconds: 1}},
+		{"", new(editionspb.Editions)},
+		{"x", m},
+	} {
+		got, err := jsonwire.MarshalOptions{Indent: c.indent}.MarshalAppend([]byte("prefix:"), c.m)
+		if err == nil || got != nil {
+			t.Errorf("MarshalAppend(%v) with indent %q: got %q, %v; want nil and an error", c.m, c.indent, got, err)
+		}
 	}
 	if got := (jsonwire.MarshalOptions{}).Format(nil); got != "<nil>" {
 		t.Fatalf("Format(nil): got %q", got)
