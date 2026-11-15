@@ -213,7 +213,7 @@ func TestIndentCache(t *testing.T) {
 // TestReleaseDecodeState checks that a pooled decoder does not keep the input
 // of the caller alive.
 func TestReleaseDecodeState(t *testing.T) {
-	input := []byte(`{"optionalInt32":1}`)
+	input := largeInput(`{"optionalInt32":1}`)
 	ref := weak.Make(&input[0])
 	state := getDecodeState(input)
 	if _, err := state.dec.ReadToken(); err != nil {
@@ -249,7 +249,7 @@ func TestSubDecoderOptions(t *testing.T) {
 // to the input, so that a pooled sub-decoder does not keep it alive.
 func TestSubDecoderReleasesInput(t *testing.T) {
 	t.Parallel()
-	input := []byte(`{"value":1}`)
+	input := largeInput(`{"value":1}`)
 	ref := weak.Make(&input[0])
 	sub := decoder{subOptions: subDecoderOptions[0]}.subDecoder(input)
 	if _, err := sub.dec.ReadToken(); err != nil {
@@ -264,4 +264,17 @@ func TestSubDecoderReleasesInput(t *testing.T) {
 		t.Error("a pooled sub-decoder keeps the input")
 	}
 	runtime.KeepAlive(dec)
+}
+
+// largeInput returns s followed by white space, in a new allocation of 1 KB.
+// A weak pointer to a small allocation is not reliable: the runtime puts
+// allocations below 16 bytes together in one block, which other values can
+// keep alive.
+func largeInput(s string) []byte {
+	b := make([]byte, 1<<10)
+	n := copy(b, s)
+	for i := n; i < len(b); i++ {
+		b[i] = ' '
+	}
+	return b
 }
