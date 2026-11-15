@@ -206,7 +206,7 @@ func (d decoder) unmarshalAny(m protoreflect.Message) error {
 	// One sub-decoder reads raw two times: first to find the type, then to
 	// decode the fields.
 	sub := d.subDecoder(raw)
-	defer putSubDecoder(sub)
+	defer putDecoder(sub.dec)
 	typeURL, err := findTypeURL(sub)
 	switch {
 	case errors.Is(err, errEmptyObject):

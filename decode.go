@@ -95,9 +95,9 @@ type UnmarshalOptions struct {
 // using options in the UnmarshalOptions object. If Unmarshal returns an error,
 // the given message may be partially set.
 func (o UnmarshalOptions) Unmarshal(b []byte, m proto.Message) error {
-	state := getDecodeState(b)
-	defer putDecodeState(state)
-	return o.unmarshalAll(state.dec, m)
+	dec := getDecoder(b, jsontext.AllowDuplicateNames(true))
+	defer putDecoder(dec)
+	return o.unmarshalAll(dec, m)
 }
 
 // UnmarshalRead reads one JSON value from r and populates the given
@@ -173,38 +173,26 @@ func (o UnmarshalOptions) UnmarshalDecode(dec *jsontext.Decoder, m proto.Message
 	return proto.CheckInitialized(m)
 }
 
-// decodeState is a reusable decoder for Unmarshal.
-//
-// The decoder reads b through a bytes.Buffer, which jsontext parses in place
-// without a copy. So decoder memory is the memory of b, and the pooled decoder
-// keeps no large buffer.
-type decodeState struct {
-	dec *jsontext.Decoder
-}
-
+// decoderPool holds decoders for Unmarshal and Any values.
+// Each decoder reads a bytes.Buffer in place and retains no input after release.
 var (
-	decodeStatePool sync.Pool
-	emptyBuffer     = new(bytes.Buffer)
+	decoderPool sync.Pool
+	emptyBuffer = new(bytes.Buffer)
 )
 
-func getDecodeState(b []byte) *decodeState {
-	state, _ := decodeStatePool.Get().(*decodeState)
-	if state == nil {
-		state = &decodeState{dec: jsontext.NewDecoder(bytes.NewBuffer(b), jsontext.AllowDuplicateNames(true))}
-		return state
+func getDecoder(b []byte, opts jsontext.Options) *jsontext.Decoder {
+	dec, _ := decoderPool.Get().(*jsontext.Decoder)
+	if dec == nil {
+		return jsontext.NewDecoder(bytes.NewBuffer(b), opts)
 	}
-	state.dec.Reset(bytes.NewBuffer(b), jsontext.AllowDuplicateNames(true))
-	return state
+	dec.Reset(bytes.NewBuffer(b), opts)
+	return dec
 }
 
-func putDecodeState(state *decodeState) {
-	state.release()
-	decodeStatePool.Put(state)
-}
-
-// release drops the reference to the caller's input.
-func (state *decodeState) release() {
-	state.dec.Reset(emptyBuffer)
+// putDecoder releases the input before it returns dec to the pool.
+func putDecoder(dec *jsontext.Decoder) {
+	dec.Reset(emptyBuffer)
+	decoderPool.Put(dec)
 }
 
 // decoder holds the state for one call. Methods use a value receiver, so that
@@ -426,29 +414,13 @@ func unsafeString(b []byte) string {
 //
 // The sub-decoder parses raw in place, without a copy. The caller must not
 // read from d.dec while it uses the sub-decoder, because raw can refer to the
-// memory of d.dec. The caller must call putSubDecoder when it is done.
+// memory of d.dec. The caller must call putDecoder when it is done.
 //
 // The jsontext.Decoder comes from a pool. This is safe because no string view
 // lives longer than the sub-decoder: a value that is kept is always a copy.
 func (d decoder) subDecoder(raw []byte) decoder {
-	sub := d
-	dec, _ := subDecoderPool.Get().(*jsontext.Decoder)
-	if dec == nil {
-		dec = jsontext.NewDecoder(bytes.NewBuffer(raw), d.subOptions)
-	} else {
-		dec.Reset(bytes.NewBuffer(raw), d.subOptions)
-	}
-	sub.dec = dec
-	return sub
-}
-
-var subDecoderPool sync.Pool
-
-// putSubDecoder returns the jsontext.Decoder of sub to the pool, without the
-// reference to its input.
-func putSubDecoder(sub decoder) {
-	sub.dec.Reset(emptyBuffer)
-	subDecoderPool.Put(sub.dec)
+	d.dec = getDecoder(raw, d.subOptions)
+	return d
 }
 
 // reset makes the sub-decoder read raw again from the start.

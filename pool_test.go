@@ -210,24 +210,24 @@ func TestIndentCache(t *testing.T) {
 	}
 }
 
-// TestReleaseDecodeState checks that a pooled decoder does not keep the input
+// TestReleaseDecoder checks that a pooled decoder does not keep the input
 // of the caller alive.
-func TestReleaseDecodeState(t *testing.T) {
+func TestReleaseDecoder(t *testing.T) {
 	input := largeInput(`{"optionalInt32":1}`)
 	ref := weak.Make(&input[0])
-	state := getDecodeState(input)
-	if _, err := state.dec.ReadToken(); err != nil {
+	dec := getDecoder(input, jsontext.AllowDuplicateNames(true))
+	if _, err := dec.ReadToken(); err != nil {
 		t.Fatal(err)
 	}
-	// putDecodeState must release the input before the state goes into the
+	// putDecoder must release the input before the decoder goes into the
 	// pool, where it stays alive.
-	putDecodeState(state)
+	putDecoder(dec)
 	input = nil
 	runtime.GC()
 	if ref.Value() != nil {
-		t.Error("a pooled decode state keeps the input")
+		t.Error("a pooled decoder keeps the input")
 	}
-	runtime.KeepAlive(state)
+	runtime.KeepAlive(dec)
 }
 
 // TestSubDecoderOptions checks that sub-decoders allow duplicate names. A
@@ -245,7 +245,7 @@ func TestSubDecoderOptions(t *testing.T) {
 	}
 }
 
-// TestSubDecoderReleasesInput checks that putSubDecoder drops the reference
+// TestSubDecoderReleasesInput checks that putDecoder drops the reference
 // to the input, so that a pooled sub-decoder does not keep it alive.
 func TestSubDecoderReleasesInput(t *testing.T) {
 	t.Parallel()
@@ -257,7 +257,7 @@ func TestSubDecoderReleasesInput(t *testing.T) {
 	}
 	// Hold the decoder directly. The pool can drop it.
 	dec := sub.dec
-	putSubDecoder(sub)
+	putDecoder(sub.dec)
 	input = nil
 	runtime.GC()
 	if ref.Value() != nil {
