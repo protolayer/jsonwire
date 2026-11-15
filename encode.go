@@ -124,7 +124,8 @@ func (o MarshalOptions) Marshal(m proto.Message) ([]byte, error) {
 }
 
 // MarshalAppend appends the ProtoJSON encoding of m to b and returns the
-// result. On error, it returns nil, the same as protojson.
+// result. On error, it returns nil. protojson does the same, except for a
+// missing required field, where it also returns the output.
 func (o MarshalOptions) MarshalAppend(b []byte, m proto.Message) ([]byte, error) {
 	state, err := o.getEncodeState()
 	if err != nil {

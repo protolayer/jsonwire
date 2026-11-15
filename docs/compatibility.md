@@ -73,7 +73,7 @@ jsonwire:   {"a":1,"b":2}
 
 ### No partial output for missing required fields
 
-For a message with a missing required field, `protojson.Marshal` returns the JSON and an error. `jsonwire` returns only the error, and `MarshalEncode` writes nothing to the encoder.
+For a message with a missing required field, `protojson.Marshal` and `MarshalAppend` return the JSON and an error. `jsonwire` returns only the error, and `MarshalEncode` writes nothing to the encoder.
 
 **Why it is different:** `MarshalEncode` writes into a larger JSON value. Partial output followed by an error would leave that value broken.
 
