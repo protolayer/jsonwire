@@ -103,6 +103,11 @@ func (o UnmarshalOptions) Unmarshal(b []byte, m proto.Message) error {
 // UnmarshalRead reads one JSON value from r and populates the given
 // [proto.Message] using options in the UnmarshalOptions object. It reads r
 // until EOF, and it is an error if r contains more than one JSON value.
+//
+// UnmarshalRead does not limit the size of the input. For input from an
+// untrusted source, limit r, for example with [io.LimitReader]. Memory use
+// grows with the input: each google.protobuf.Any value is read completely
+// before it is decoded, because its "@type" field can come last.
 func (o UnmarshalOptions) UnmarshalRead(r io.Reader, m proto.Message) error {
 	return o.unmarshalAll(jsontext.NewDecoder(r, jsontext.AllowDuplicateNames(true)), m)
 }
