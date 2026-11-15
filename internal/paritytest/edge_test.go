@@ -1,6 +1,7 @@
 package paritytest
 
 import (
+	"math"
 	"strconv"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/protolayer/jsonwire"
@@ -192,6 +194,8 @@ var edgeInputs = []string{
 	// The depth check of an Any without @type, which DiscardUnknown discards.
 	`{"optionalAny":{"a":[]}}`, `{"optionalAny":{"a":[[]]}}`, `{"optionalAny":{"a":[[[]]]}}`,
 	`{"optionalAny":{"a":[[[[]]]]}}`,
+	// Quoted numbers with an exponent sign or white space.
+	`{"optionalInt32":"1e+2"}`, `{"optionalInt32":"1e-0"}`, `{"optionalInt32":" 1"}`, `{"optionalInt32":"1 "}`,
 	// Numbers with fractions and exponents for integer and float fields.
 	`{"optionalDouble":"1.25"}`, `{"optionalInt32":"1.00"}`, `{"optionalInt32":10.5e-1}`,
 	`{"optionalInt32":15e-1}`, `{"optionalInt32":150e-1}`, `{"optionalInt64":"1.50e1"}`,
@@ -310,6 +314,8 @@ func invalidMessages() []proto.Message {
 		&durationpb.Duration{Nanos: 1000000000},
 		&durationpb.Duration{Seconds: 1, Nanos: -1},
 		&durationpb.Duration{Seconds: 1, Nanos: -1000000000},
+		&durationpb.Duration{Nanos: -1000000000},
+		&durationpb.Duration{Seconds: -1, Nanos: -1000000000},
 		&timestamppb.Timestamp{Nanos: -1},
 		&timestamppb.Timestamp{Nanos: 1000000000},
 		&timestamppb.Timestamp{Seconds: 253402300800},
@@ -321,11 +327,41 @@ func invalidMessages() []proto.Message {
 		&anypb.Any{TypeUrl: "type.googleapis.com/google.protobuf.Duration", Value: []byte{0xff}},
 		&testpb.TestAllTypesProto3{OptionalDuration: &durationpb.Duration{Nanos: 1000000000}},
 		&testpb.TestAllTypesProto3{RepeatedTimestamp: []*timestamppb.Timestamp{{Nanos: -1}}},
+		structpb.NewNumberValue(math.NaN()),
+		structpb.NewNumberValue(math.Inf(1)),
+		structpb.NewNumberValue(math.Inf(-1)),
+	}
+}
+
+// limitMessages are valid messages at the limits of the well-known types.
+// Marshal must accept them, the same as protojson.
+func limitMessages() []proto.Message {
+	return []proto.Message{
+		&durationpb.Duration{Seconds: 315576000000},
+		&durationpb.Duration{Seconds: -315576000000},
+		&durationpb.Duration{Seconds: 315576000000, Nanos: 999999999},
+		&durationpb.Duration{Seconds: -315576000000, Nanos: -999999999},
+		&durationpb.Duration{Nanos: 999999999},
+		&durationpb.Duration{Nanos: -999999999},
+		&timestamppb.Timestamp{Seconds: 253402300799, Nanos: 999999999},
+		&timestamppb.Timestamp{Seconds: -62135596800},
+		&timestamppb.Timestamp{Nanos: 999999999},
+		structpb.NewNumberValue(math.MaxFloat64),
+		structpb.NewNumberValue(-math.MaxFloat64),
+		structpb.NewNumberValue(math.SmallestNonzeroFloat64),
 	}
 }
 
 func TestInvalidMessages(t *testing.T) {
 	t.Parallel()
+	for _, m := range limitMessages() {
+		for _, c := range marshalCases {
+			checkMarshal(t, m, c)
+		}
+		if _, err := jsonwire.Marshal(m); err != nil {
+			t.Errorf("Marshal(%v): %v", m, err)
+		}
+	}
 	for _, m := range invalidMessages() {
 		for _, c := range marshalCases {
 			checkMarshal(t, m, c)

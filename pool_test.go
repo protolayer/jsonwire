@@ -15,7 +15,7 @@ import (
 	testpb "github.com/protolayer/jsonwire/internal/gen/google/protobuf"
 )
 
-// TestPutEncodeStateBuffer checks the buffer policy: a large buffer stays while
+// TestReleaseBuffer checks the buffer policy: a large buffer stays while
 // it is well used, and goes after 5 poorly used calls in a row.
 func TestReleaseBuffer(t *testing.T) {
 	// The state does not come from the pool, so that other tests cannot use
@@ -75,7 +75,56 @@ func TestReleaseBuffer(t *testing.T) {
 	}
 }
 
-// TestPutEncodeStateEncoder checks that the encoder, which keeps a scratch
+// TestReleaseBufferThresholds checks the limits of the buffer policy: a
+// buffer of up to 4 KB always stays, and a call that uses exactly a quarter
+// of the buffer is a well-used call.
+func TestReleaseBufferThresholds(t *testing.T) {
+	state := newTestEncodeState(t)
+	// use writes n bytes into a buffer with the capacity size, or into the
+	// current buffer if size is 0, and releases it.
+	use := func(size, n int) {
+		t.Helper()
+		if size > 0 {
+			state.buf = *bytes.NewBuffer(make([]byte, 0, size))
+		}
+		state.buf.Reset()
+		state.buf.Write(bytes.Repeat([]byte{'x'}, n))
+		state.release()
+	}
+	use(4<<10, 1)
+	for range 10 {
+		use(0, 1)
+	}
+	if state.buf.Cap() != 4<<10 {
+		t.Errorf("a 4 KB buffer was dropped: capacity %d", state.buf.Cap())
+	}
+	const size = 64 << 10
+	use(size, size/4)
+	for range 4 {
+		use(0, size/4-1)
+	}
+	// A call that uses exactly a quarter resets the count.
+	use(0, size/4)
+	for range 4 {
+		use(0, size/4-1)
+	}
+	if state.buf.Cap() != size {
+		t.Fatalf("buffer dropped after a call that used a quarter: capacity %d", state.buf.Cap())
+	}
+	use(0, size/4-1)
+	if state.buf.Cap() != 0 {
+		t.Errorf("buffer capacity %d after 5 calls that used less than a quarter, want 0", state.buf.Cap())
+	}
+	use(4<<10+1, 1)
+	for range 4 {
+		use(0, 1)
+	}
+	if state.buf.Cap() != 0 {
+		t.Errorf("a buffer above 4 KB stayed after 5 poorly used calls: capacity %d", state.buf.Cap())
+	}
+}
+
+// TestReleaseEncoder checks that the encoder, which keeps a scratch
 // buffer as large as its largest value, is dropped after a large value.
 func TestReleaseEncoder(t *testing.T) {
 	// The state does not come from the pool, so that other tests cannot use
@@ -118,9 +167,9 @@ func TestMaxValue(t *testing.T) {
 		{size: maxPooledValue, keep: false},
 	} {
 		state := newTestEncodeState(t)
-		// The int64 field makes the encoder use its scratch buffer again
-		// after the bytes value.
-		m := &testpb.TestAllTypesProto3{OptionalBytes: make([]byte, c.size), OptionalInt64: 1}
+		// A small value after the large one checks that the largest value
+		// counts, not the last one.
+		m := &testpb.TestAllTypesProto3{RepeatedBytes: [][]byte{make([]byte, c.size), {1}}}
 		if err := (MarshalOptions{}).marshalEncode(state.enc, m, state.scratch, false); err != nil {
 			t.Fatal(err)
 		}
@@ -173,11 +222,13 @@ func TestReleaseDecodeState(t *testing.T) {
 	if _, err := state.dec.ReadToken(); err != nil {
 		t.Fatal(err)
 	}
-	state.release()
+	// putDecodeState must release the input before the state goes into the
+	// pool, where it stays alive.
+	putDecodeState(state)
 	input = nil
 	runtime.GC()
 	if ref.Value() != nil {
-		t.Error("decode state keeps the input after release")
+		t.Error("a pooled decode state keeps the input")
 	}
 	runtime.KeepAlive(state)
 }

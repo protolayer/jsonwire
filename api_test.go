@@ -300,6 +300,16 @@ func TestNestingLimit(t *testing.T) {
 	if err := jsonwire.Unmarshal(input, new(testpb.TestAllTypesProto3)); err == nil {
 		t.Error("Unmarshal through a list: want error at 10003 JSON levels")
 	}
+	var throughList testpb.TestAllTypesProto3
+	if err := protojson.Unmarshal(input, &throughList); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := protojson.Marshal(&throughList); err != nil {
+		t.Fatalf("protojson: %v", err)
+	}
+	if _, err := jsonwire.Marshal(&throughList); err == nil {
+		t.Error("Marshal through a list: want error at 10003 JSON levels")
+	}
 
 	nested := func(depth int) *testpb.TestAllTypesProto3 {
 		root := new(testpb.TestAllTypesProto3)
@@ -981,6 +991,39 @@ func TestDuplicateNamesInAny(t *testing.T) {
 		gotErr := opts.UnmarshalDecode(lenient, &got)
 		if (wantErr == nil) != (gotErr == nil) || (gotErr == nil && !proto.Equal(&got, &want)) {
 			t.Errorf("%s: lenient decoder: got %v, %v; protojson: %v, %v", input, &got, gotErr, &want, wantErr)
+		}
+	}
+}
+
+// TestManyFields checks a message with more than 256 fields, so that field
+// numbers and indexes above 255 do not collide with smaller ones.
+func TestManyFields(t *testing.T) {
+	t.Parallel()
+	md := &descriptorpb.DescriptorProto{Name: proto.String("Large")}
+	for i := range 300 {
+		md.Field = append(md.Field, &descriptorpb.FieldDescriptorProto{
+			Name:   proto.String(fmt.Sprintf("f%d", i)),
+			Number: proto.Int32(int32(i + 1)),
+			Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+			Type:   descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum(),
+		})
+	}
+	fd, err := protodesc.NewFile(&descriptorpb.FileDescriptorProto{
+		Name:        proto.String("large.proto"),
+		Package:     proto.String("large"),
+		Syntax:      proto.String("proto3"),
+		MessageType: []*descriptorpb.DescriptorProto{md},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, input := range []string{`{"f0":1,"f256":2}`, `{"f1":1,"f257":2}`, `{"f299":1,"f299":2}`} {
+		want := dynamicpb.NewMessage(fd.Messages().Get(0))
+		got := dynamicpb.NewMessage(fd.Messages().Get(0))
+		wantErr := protojson.Unmarshal([]byte(input), want)
+		gotErr := jsonwire.Unmarshal([]byte(input), got)
+		if (gotErr == nil) != (wantErr == nil) || (gotErr == nil && !proto.Equal(got, want)) {
+			t.Errorf("%s: got %v, %v; protojson: %v, %v", input, got, gotErr, want, wantErr)
 		}
 	}
 }
