@@ -1,24 +1,26 @@
 package jsonwire_test
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"bytes"
-	"fmt"
 	"github.com/protolayer/jsonwire"
 	testpb "github.com/protolayer/jsonwire/internal/gen/google/protobuf"
 	"github.com/protolayer/jsonwire/internal/testutil"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/dynamicpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	"strings"
-	"time"
 )
 
 // benchMessages returns the benchmark messages in testdata/benchmark. They are
@@ -170,9 +172,16 @@ var (
 	_ jsonv2.UnmarshalerFrom = (*jsonwireMessage)(nil)
 )
 
+// benchShape is a message for BenchmarkShapes. The input for Unmarshal is the
+// protojson output for m, or input if it is set.
+type benchShape struct {
+	m     proto.Message
+	input []byte
+}
+
 // benchShapes returns messages of different shapes and sizes, so that the
 // results do not depend on one message.
-func benchShapes(b *testing.B) map[string]proto.Message {
+func benchShapes(b *testing.B) map[string]benchShape {
 	b.Helper()
 	list := func(n int) *testpb.TestAllTypesProto3 {
 		m := new(testpb.TestAllTypesProto3)
@@ -207,27 +216,53 @@ func benchShapes(b *testing.B) map[string]proto.Message {
 	large := benchMessages(b)["large"]
 	dynLarge := dynamicpb.NewMessage(large.ProtoReflect().Descriptor())
 	proto.Merge(dynLarge, large)
-	return map[string]proto.Message{
-		"list20":       list(20),
-		"list5000":     list(5000),
-		"strings":      strs,
-		"numbers":      nums,
-		"bytes64KB":    blob(64 << 10),
-		"bytes600KB":   blob(600 << 10),
-		"bytes2MB":     blob(2 << 20),
-		"dynamicLarge": dynLarge,
+	anys := new(testpb.TestAllTypesProto3)
+	for i := range 1000 {
+		a, err := anypb.New(durationpb.New(time.Duration(i) * time.Millisecond))
+		if err != nil {
+			b.Fatal(err)
+		}
+		anys.RepeatedAny = append(anys.RepeatedAny, a)
+	}
+	// Integers in a form other than the plain form, for example 123.0.
+	var floatInts bytes.Buffer
+	floatInts.WriteString(`{"repeatedInt64":[`)
+	for i := range 10000 {
+		if i > 0 {
+			floatInts.WriteByte(',')
+		}
+		fmt.Fprintf(&floatInts, "%d.0", i*7919)
+	}
+	floatInts.WriteString(`]}`)
+	return map[string]benchShape{
+		"list20":       {m: list(20)},
+		"list5000":     {m: list(5000)},
+		"strings":      {m: strs},
+		"numbers":      {m: nums},
+		"bytes64KB":    {m: blob(64 << 10)},
+		"bytes600KB":   {m: blob(600 << 10)},
+		"bytes2MB":     {m: blob(2 << 20)},
+		"dynamicLarge": {m: dynLarge},
+		"any1000":      {m: anys},
+		"floatInts":    {m: new(testpb.TestAllTypesProto3), input: floatInts.Bytes()},
+		// One 1 MB string of CJK text, and one with many escapes.
+		"textCJK1MB":     {m: &testpb.TestAllTypesProto3{OptionalString: strings.Repeat("\u65e5\u672c\u8a9e\u306e\u30c6\u30ad\u30b9\u30c8", 1<<15)}},
+		"textEscapes1MB": {m: &testpb.TestAllTypesProto3{OptionalString: strings.Repeat("abcdefghijklmn\n\"", 1<<16)}},
 	}
 }
 
 // BenchmarkShapes compares protojson and jsonwire for each shape. Run it with
 // -cpu=1. The Parallel variants use all CPUs; run them without -cpu.
 func BenchmarkShapes(b *testing.B) {
-	for name, m := range benchShapes(b) {
-		data, err := protojson.Marshal(m)
-		if err != nil {
-			b.Fatal(err)
+	for name, shape := range benchShapes(b) {
+		m, data := shape.m, shape.input
+		if data == nil {
+			out, err := protojson.Marshal(m)
+			if err != nil {
+				b.Fatal(err)
+			}
+			data = testutil.Compact(b, out)
 		}
-		data = testutil.Compact(b, data)
 		newMessage := func() proto.Message { return m.ProtoReflect().New().Interface() }
 		impls := []struct {
 			name      string
@@ -237,8 +272,13 @@ func BenchmarkShapes(b *testing.B) {
 			{"protojson", protojson.Marshal, protojson.Unmarshal},
 			{"jsonwire", jsonwire.Marshal, jsonwire.Unmarshal},
 		}
+		// A shape with its own input tests only Unmarshal.
+		marshal := shape.input == nil
 		for _, impl := range impls {
 			b.Run(name+"/Marshal/"+impl.name, func(b *testing.B) {
+				if !marshal {
+					b.Skip("Unmarshal only")
+				}
 				b.SetBytes(int64(len(data)))
 				for b.Loop() {
 					if _, err := impl.marshal(m); err != nil {
@@ -255,6 +295,9 @@ func BenchmarkShapes(b *testing.B) {
 				}
 			})
 			b.Run(name+"/ParallelMarshal/"+impl.name, func(b *testing.B) {
+				if !marshal {
+					b.Skip("Unmarshal only")
+				}
 				b.SetBytes(int64(len(data)))
 				b.RunParallel(func(pb *testing.PB) {
 					for pb.Next() {
