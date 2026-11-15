@@ -52,10 +52,28 @@ A descriptor can give two fields the same JSON name, for example with the editio
 
 ### Nesting limit
 
-`jsontext` rejects JSON that is nested more than 10000 levels deep. `protojson` limits only message nesting, with `RecursionLimit`. So a `RecursionLimit` above 10000 has no effect in `jsonwire`:
+`jsontext` rejects JSON that is nested more than 10000 levels deep, and this limit cannot be changed. `protojson` limits only message nesting, with `RecursionLimit` (default 10000), and it has no limit for `Marshal`. This gives three differences.
+
+A `RecursionLimit` above 10000 has no effect:
 
 ```go
 // A message nested 15000 levels deep.
 opts := jsonwire.UnmarshalOptions{RecursionLimit: 20000}
 opts.Unmarshal(input, msg) // error: exceeded max depth (protojson: ok)
 ```
+
+Lists and maps add JSON levels that `RecursionLimit` does not count. So with the default options, a deep message that goes through a list or a map can fail before it gets to 10000 message levels:
+
+```go
+// {"children":[{"children":[{ ... }]}]}: each message level adds 2 JSON levels.
+jsonwire.Unmarshal(input, msg) // error at about 5000 message levels (protojson: ok)
+```
+
+`Marshal` fails for a message that is nested more than 10000 levels deep:
+
+```go
+// A message nested 10001 levels deep.
+jsonwire.Marshal(msg) // error: exceeded max depth (protojson: ok)
+```
+
+`protojson` cannot read such output back with its default `RecursionLimit`.

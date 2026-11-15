@@ -43,8 +43,8 @@
 //   - Only valid JSON is accepted. protojson accepts some invalid numbers,
 //     for example 0E.
 //   - The output is compact and deterministic, without random white space.
-//   - JSON nesting is limited to 10000 levels, also with a larger
-//     RecursionLimit.
+//   - JSON nesting is limited to 10000 levels for Marshal and Unmarshal, also
+//     with a larger RecursionLimit. Lists and maps count as levels.
 //
 // For the complete list, see
 // https://github.com/protolayer/jsonwire/blob/main/docs/compatibility.md.

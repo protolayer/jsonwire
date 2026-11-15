@@ -283,6 +283,41 @@ func TestRecursionLimit(t *testing.T) {
 	}
 }
 
+// TestNestingLimit checks the differences that docs/compatibility.md gives for
+// the 10000-level JSON nesting limit of jsontext.
+func TestNestingLimit(t *testing.T) {
+	t.Parallel()
+	// Each cycle adds 2 message levels and 3 JSON levels (an object, an array,
+	// and an object). 3334 cycles are 6669 message levels and 10003 JSON
+	// levels.
+	const cycles = 3334
+	input := []byte(strings.Repeat(`{"repeatedNestedMessage":[{"corecursive":`, cycles) +
+		"{}" + strings.Repeat("}]}", cycles))
+	if err := protojson.Unmarshal(input, new(testpb.TestAllTypesProto3)); err != nil {
+		t.Fatalf("protojson: %v", err)
+	}
+	if err := jsonwire.Unmarshal(input, new(testpb.TestAllTypesProto3)); err == nil {
+		t.Error("Unmarshal through a list: want error at 10003 JSON levels")
+	}
+
+	nested := func(depth int) *testpb.TestAllTypesProto3 {
+		root := new(testpb.TestAllTypesProto3)
+		for range depth - 1 {
+			root = &testpb.TestAllTypesProto3{RecursiveMessage: root}
+		}
+		return root
+	}
+	if _, err := jsonwire.Marshal(nested(10000)); err != nil {
+		t.Errorf("Marshal of 10000 levels: %v", err)
+	}
+	if _, err := protojson.Marshal(nested(10001)); err != nil {
+		t.Fatalf("protojson: %v", err)
+	}
+	if _, err := jsonwire.Marshal(nested(10001)); err == nil {
+		t.Error("Marshal of 10001 levels: want error")
+	}
+}
+
 // streamMessage connects a message to encoding/json with the json/v2
 // streaming interfaces, the same way generated code would.
 type streamMessage struct {
