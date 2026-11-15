@@ -863,3 +863,45 @@ func TestMarshalOutputIsOwned(t *testing.T) {
 		}
 	}
 }
+
+// TestAnyValuesAreOwned checks that an Any does not refer to the input or to
+// the memory of a pooled decoder after Unmarshal. Later calls use the same
+// pooled decoders. The type URL has no escapes, so that the decoder could
+// return a view of the input for it.
+func TestAnyValuesAreOwned(t *testing.T) {
+	t.Parallel()
+	input := func(s string) []byte {
+		return []byte(`{"optionalAny":{"optionalString":"` + s + `\n","@type":"type.googleapis.com/` +
+			`protobuf_test_messages.proto3.TestAllTypesProto3","mapStringString":{"k` + s + `\t":"v` + s + `\""},` +
+			`"repeatedString":["` + s + `\\","` + s + `"],"optionalAny":{"@type":"type.googleapis.com/google.protobuf.StringValue",` +
+			`"value":"` + s + `é"}}}`)
+	}
+	var kept []*testpb.TestAllTypesProto3
+	var want []*testpb.TestAllTypesProto3
+	for i := range 50 {
+		in := input(strings.Repeat(string(rune('a'+i%26)), 10+i))
+		var w testpb.TestAllTypesProto3
+		if err := protojson.Unmarshal(in, &w); err != nil {
+			t.Fatal(err)
+		}
+		var read testpb.TestAllTypesProto3
+		if err := jsonwire.UnmarshalRead(iotest.OneByteReader(bytes.NewReader(in)), &read); err != nil {
+			t.Fatal(err)
+		}
+		var m testpb.TestAllTypesProto3
+		if err := jsonwire.Unmarshal(in, &m); err != nil {
+			t.Fatal(err)
+		}
+		// The message must not refer to the input either.
+		for j := range in {
+			in[j] = 'x'
+		}
+		kept = append(kept, &m, &read)
+		want = append(want, &w, &w)
+	}
+	for i := range kept {
+		if !proto.Equal(kept[i], want[i]) {
+			t.Fatalf("message %d changed after later calls:\ngot  %v\nwant %v", i, kept[i], want[i])
+		}
+	}
+}

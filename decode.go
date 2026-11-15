@@ -404,11 +404,29 @@ func unsafeString(b []byte) string {
 //
 // The sub-decoder parses raw in place, without a copy. The caller must not
 // read from d.dec while it uses the sub-decoder, because raw can refer to the
-// memory of d.dec.
+// memory of d.dec. The caller must call putSubDecoder when it is done.
+//
+// The jsontext.Decoder comes from a pool. This is safe because no string view
+// lives longer than the sub-decoder: a value that is kept is always a copy.
 func (d decoder) subDecoder(raw []byte) decoder {
 	sub := d
-	sub.dec = jsontext.NewDecoder(bytes.NewBuffer(raw), d.subOptions)
+	dec, _ := subDecoderPool.Get().(*jsontext.Decoder)
+	if dec == nil {
+		dec = jsontext.NewDecoder(bytes.NewBuffer(raw), d.subOptions)
+	} else {
+		dec.Reset(bytes.NewBuffer(raw), d.subOptions)
+	}
+	sub.dec = dec
 	return sub
+}
+
+var subDecoderPool sync.Pool
+
+// putSubDecoder returns the jsontext.Decoder of sub to the pool, without the
+// reference to its input.
+func putSubDecoder(sub decoder) {
+	sub.dec.Reset(emptyBuffer)
+	subDecoderPool.Put(sub.dec)
 }
 
 // reset makes the sub-decoder read raw again from the start.
