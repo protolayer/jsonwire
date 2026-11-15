@@ -7,6 +7,7 @@
 package jsonwire
 
 import (
+	"math"
 	"strconv"
 	"strings"
 )
@@ -243,9 +244,13 @@ func intString(raw string) (string, bool) {
 // parseInt returns the signed integer value of the given JSON number. It
 // returns false if the number is not an integer or does not fit in bitSize.
 func parseInt(raw string, bitSize int) (int64, bool) {
-	// Fast path for plain integers, which are the common case. strconv never
-	// accepts a fraction or an exponent, so a number with one goes straight to
-	// intString. Then strconv does not allocate an error that is not used.
+	// Fast path for short plain integers, which are the common case.
+	if n, ok := parseDigits(raw, bitSize, true); ok {
+		return int64(n), true
+	}
+	// strconv never accepts a fraction or an exponent, so a number with one
+	// goes straight to intString. Then strconv does not allocate an error
+	// that is not used.
 	if isPlainInt(raw) {
 		if n, err := strconv.ParseInt(raw, 10, bitSize); err == nil {
 			return n, true
@@ -266,6 +271,9 @@ func parseInt(raw string, bitSize int) (int64, bool) {
 // returns false if the number is not an unsigned integer or does not fit in
 // bitSize.
 func parseUint(raw string, bitSize int) (uint64, bool) {
+	if n, ok := parseDigits(raw, bitSize, false); ok {
+		return n, true
+	}
 	if isPlainInt(raw) {
 		if n, err := strconv.ParseUint(raw, 10, bitSize); err == nil {
 			return n, true
@@ -293,4 +301,43 @@ func isPlainInt(raw string) bool {
 		}
 	}
 	return true
+}
+
+// parseDigits parses an optional minus sign, if signed is true, and 1 to 18
+// digits in one pass. 18 digits always fit in 64 bits. It returns false for
+// all other input and for a value that does not fit in bitSize. Then the
+// caller uses strconv, which gives the same result for the input that
+// parseDigits accepts. For a signed value, the result is the two's complement.
+func parseDigits(raw string, bitSize int, signed bool) (uint64, bool) {
+	s := raw
+	neg := false
+	if signed && len(s) > 0 && s[0] == '-' {
+		neg = true
+		s = s[1:]
+	}
+	if len(s) == 0 || len(s) > 18 {
+		return 0, false
+	}
+	var n uint64
+	for i := range len(s) {
+		c := s[i] - '0'
+		if c > 9 {
+			return 0, false
+		}
+		n = n*10 + uint64(c)
+	}
+	if bitSize == 32 {
+		switch {
+		case !signed && n > math.MaxUint32:
+			return 0, false
+		case signed && !neg && n > math.MaxInt32:
+			return 0, false
+		case signed && neg && n > -math.MinInt32:
+			return 0, false
+		}
+	}
+	if neg {
+		return -n, true
+	}
+	return n, true
 }
