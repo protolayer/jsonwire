@@ -701,8 +701,7 @@ func parseDuration(input string) (int64, int32, bool) {
 		return 0, 0, false
 	}
 
-	hasFrac := false
-	var frac [9]byte
+	var nanos int32
 	if len(b) > 0 {
 		if b[0] != '.' {
 			return 0, 0, false
@@ -711,7 +710,7 @@ func parseDuration(input string) (int64, int32, bool) {
 		b = b[1:]
 		n := 0
 		for len(b) > 0 && n < 9 && isDigit(b[0]) {
-			frac[n] = b[0]
+			nanos = nanos*10 + int32(b[0]-'0')
 			n++
 			b = b[1:]
 		}
@@ -721,9 +720,8 @@ func parseDuration(input string) (int64, int32, bool) {
 		}
 		// Pad fractional part with 0s.
 		for i := n; i < 9; i++ {
-			frac[i] = '0'
+			nanos *= 10
 		}
-		hasFrac = true
 	}
 
 	var secs int64
@@ -735,27 +733,11 @@ func parseDuration(input string) (int64, int32, bool) {
 		}
 	}
 
-	var nanos int64
-	if hasFrac {
-		nanob := bytes.TrimLeft(frac[:], "0")
-		if len(nanob) > 0 {
-			var err error
-			nanos, err = strconv.ParseInt(string(nanob), 10, 32)
-			if err != nil {
-				return 0, 0, false
-			}
-		}
-	}
-
 	if neg {
-		if secs > 0 {
-			secs = -secs
-		}
-		if nanos > 0 {
-			nanos = -nanos
-		}
+		secs = -secs
+		nanos = -nanos
 	}
-	return secs, int32(nanos), true
+	return secs, nanos, true
 }
 
 // The JSON representation for a Timestamp is a JSON string in the RFC 3339
