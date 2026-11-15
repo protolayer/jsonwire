@@ -594,7 +594,8 @@ func TestMarshalAppendAndFormat(t *testing.T) {
 	if string(got) != "prefix:"+string(want) {
 		t.Fatalf("MarshalAppend: got %s", got)
 	}
-	// On error, MarshalAppend returns nil, like protojson.
+	// On error, MarshalAppend returns nil. protojson does the same, except
+	// for a missing required field, where it also returns the output.
 	for _, c := range []struct {
 		indent string
 		m      proto.Message
@@ -845,7 +846,10 @@ func rejectsEarly(t *testing.T, r io.Reader, m proto.Message) {
 // an object name is rejected at its first token.
 func TestNameRejectsContainerEarly(t *testing.T) {
 	t.Parallel()
-	for _, prefix := range []string{`{[`, `{"optionalInt32":1,[`, `{"mapStringString":{[`} {
+	for _, prefix := range []string{
+		`{[`, `{"optionalInt32":1,[`, `{"mapStringString":{[`,
+		`{{"a":[`, `{"optionalInt32":1,{"a":[`, `{"mapStringString":{{"a":[`,
+	} {
 		rejectsEarly(t, &endlessArray{prefix: prefix}, new(testpb.TestAllTypesProto3))
 	}
 }

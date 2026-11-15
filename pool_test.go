@@ -6,11 +6,8 @@ import (
 	jsonv2 "encoding/json/v2"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"weak"
-
-	"google.golang.org/protobuf/types/known/anypb"
 
 	testpb "github.com/protolayer/jsonwire/internal/gen/google/protobuf"
 )
@@ -248,18 +245,19 @@ func TestSubDecoderOptions(t *testing.T) {
 	}
 }
 
-// TestSubDecoderReleasesInput checks that a pooled sub-decoder does not keep
-// the input of the caller alive.
+// TestSubDecoderReleasesInput checks that putSubDecoder drops the reference
+// to the input, so that a pooled sub-decoder does not keep it alive.
 func TestSubDecoderReleasesInput(t *testing.T) {
-	// Not parallel: the test replaces the pool.
-	defer func() { subDecoderPool = sync.Pool{} }()
-	subDecoderPool = sync.Pool{}
-	input := []byte(`{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":1}`)
+	t.Parallel()
+	input := []byte(`{"value":1}`)
 	ref := weak.Make(&input[0])
-	if err := Unmarshal(input, new(anypb.Any)); err != nil {
+	sub := decoder{subOptions: subDecoderOptions[0]}.subDecoder(input)
+	if _, err := sub.dec.ReadToken(); err != nil {
 		t.Fatal(err)
 	}
-	dec, _ := subDecoderPool.Get().(*jsontext.Decoder)
+	// Hold the decoder directly. The pool can drop it.
+	dec := sub.dec
+	putSubDecoder(sub)
 	input = nil
 	runtime.GC()
 	if ref.Value() != nil {
