@@ -117,6 +117,15 @@ func BenchmarkMarshal(b *testing.B) {
 				}
 			}
 		})
+		// The tuning option in docs/performance.md.
+		b.Run(name+"/json.Marshal+jsonwire,AllowDuplicateNames", func(b *testing.B) {
+			v := jsonwireContainer{ID: "x", Message: &jsonwireMessage{msg: m}}
+			for b.Loop() {
+				if _, err := jsonv2.Marshal(v, jsontext.AllowDuplicateNames(true)); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
@@ -159,6 +168,14 @@ func BenchmarkUnmarshal(b *testing.B) {
 			for b.Loop() {
 				var out jsonwireContainer
 				if err := jsonv2.Unmarshal(wrapped, &out); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+		b.Run(name+"/json.Unmarshal+jsonwire,AllowDuplicateNames", func(b *testing.B) {
+			for b.Loop() {
+				var out jsonwireContainer
+				if err := jsonv2.Unmarshal(wrapped, &out, jsontext.AllowDuplicateNames(true)); err != nil {
 					b.Fatal(err)
 				}
 			}
