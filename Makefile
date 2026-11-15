@@ -27,7 +27,7 @@ cover:
 .PHONY: bench
 bench:
 	go test -run='^$$' -bench='^Benchmark(Marshal|Unmarshal)$$' -benchmem -count=10 -cpu=1 .
-	go test -run='^$$' -bench='^BenchmarkShapes$$/[^/]+/(Marshal|Unmarshal)/' -benchmem -count=6 -cpu=1 .
+	go test -run='^$$' -bench='^BenchmarkShapes$$/[^/]+/^(Marshal|Unmarshal)$$' -benchmem -count=6 -cpu=1 .
 
 # The parallel variants of BenchmarkShapes, with all CPUs.
 .PHONY: bench-parallel
