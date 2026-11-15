@@ -245,9 +245,9 @@ func benchShapes(b *testing.B) map[string]benchShape {
 		"dynamicLarge": {m: dynLarge},
 		"any1000":      {m: anys},
 		"floatInts":    {m: new(testpb.TestAllTypesProto3), input: floatInts.Bytes()},
-		// One 1 MB string of CJK text, and one with many escapes.
-		"textCJK1MB":     {m: &testpb.TestAllTypesProto3{OptionalString: strings.Repeat("\u65e5\u672c\u8a9e\u306e\u30c6\u30ad\u30b9\u30c8", 1<<15)}},
-		"textEscapes1MB": {m: &testpb.TestAllTypesProto3{OptionalString: strings.Repeat("abcdefghijklmn\n\"", 1<<16)}},
+		// One 1 MB string of Japanese text, and one with many escapes.
+		"textJapanese1MB": {m: &testpb.TestAllTypesProto3{OptionalString: strings.Repeat("\u65e5\u672c\u8a9e\u306e\u30c6\u30ad\u30b9\u30c8", 1<<15)}},
+		"textEscapes1MB":  {m: &testpb.TestAllTypesProto3{OptionalString: strings.Repeat("abcdefghijklmn\n\"", 1<<16)}},
 	}
 }
 

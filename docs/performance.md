@@ -56,7 +56,7 @@ To check that the results are not specific to one message, `BenchmarkShapes` mea
 | 1000 `Any` values that hold a `Duration` | -31% | -15% |
 | 10000 integers written as `123.0` (unmarshal only) | n/a | -39% |
 | One 1 MB string with many escape characters | -36% | **+11%** |
-| One 1 MB string of CJK text | **+37%** | **+35%** |
+| One 1 MB string of Japanese text | **+37%** | **+35%** |
 
 `jsonwire` allocates fewer bytes for each of these shapes, except 2% more for unmarshal of the `Any` values. With all CPUs at the same time (`make bench-parallel`), the gains for the first eight shapes are 25% to 64% for marshal and 22% to 41% for unmarshal.
 
@@ -65,7 +65,7 @@ Two shapes are slower:
 - **Text that is not ASCII.** `jsontext` checks UTF-8 one character at a time for characters outside ASCII. For short strings, the gains on the rest of the message hide this cost. For long text, `protojson` is faster. The cost is inside `jsontext`, and `jsonwire` cannot skip the check.
 - **Unmarshal of long strings with many escape characters.** Both packages spend most of the time on the same unescaping work, and `jsontext` is a little slower at it.
 
-These are edge cases. Most messages have many fields with short strings, numbers, and nested messages, and for these `jsonwire` is faster. The slowdown matters only when long text strings make up most of the message, for example messages that carry whole documents in CJK text. For such messages, measure both packages with real data.
+These are edge cases. Most messages have many fields with short strings, numbers, and nested messages, and for these `jsonwire` is faster. The slowdown matters only when long text strings make up most of the message, for example messages that carry whole documents in Chinese, Japanese, or Korean. For such messages, measure both packages with real data.
 
 ## Tuning
 
