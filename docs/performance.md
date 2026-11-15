@@ -65,6 +65,8 @@ Two shapes are slower:
 - **Text that is not ASCII.** `jsontext` checks UTF-8 one character at a time for characters outside ASCII. For short strings, the gains on the rest of the message hide this cost. For long text, `protojson` is faster. The cost is inside `jsontext`, and `jsonwire` cannot skip the check.
 - **Unmarshal of long strings with many escape characters.** Both packages spend most of the time on the same unescaping work, and `jsontext` is a little slower at it.
 
+These are edge cases. Most messages have many fields with short strings, numbers, and nested messages, and for these `jsonwire` is faster. The slowdown matters only when long text strings make up most of the message, for example messages that carry whole documents in CJK text. For such messages, measure both packages with real data.
+
 ## Tuning
 
 ### Turn off the duplicate name check
