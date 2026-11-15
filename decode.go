@@ -144,6 +144,8 @@ func (o UnmarshalOptions) unmarshalAll(dec *jsontext.Decoder, m proto.Message) e
 // the same as protojson. Duplicate fields and duplicate map keys are always an
 // error. For the best performance, create dec with
 // jsontext.AllowDuplicateNames(true).
+//
+// Like UnmarshalRead, UnmarshalDecode does not limit the size of the input.
 func (o UnmarshalOptions) UnmarshalDecode(dec *jsontext.Decoder, m proto.Message) error {
 	proto.Reset(m)
 
@@ -353,6 +355,9 @@ func (d decoder) stringContent(raw jsontext.Value) (b []byte, owned bool, err er
 // object or array that never ends cannot make it read without a limit.
 func (d decoder) readStringValue() (jsontext.Value, error) {
 	if kind := d.dec.PeekKind(); kind == kindObjectOpen || kind == kindArrayOpen {
+		// In the place of an object name, ReadToken returns the error. In the
+		// place of a value, the callers check the kind first, so the second
+		// return is only a guard.
 		tok, err := d.dec.ReadToken()
 		if err != nil {
 			return nil, err
@@ -692,11 +697,9 @@ func (d decoder) unmarshalScalar(fd protoreflect.FieldDescriptor) (protoreflect.
 }
 
 // numberFromString returns the JSON number in a JSON string. The whole string
-// must be one JSON number with no white space.
+// must be one JSON number. parseNumber accepts no white space, so a string
+// with white space is rejected.
 func numberFromString(s string) (string, bool) {
-	if strings.TrimSpace(s) != s {
-		return "", false
-	}
 	if n, ok := parseNumber(s); !ok || n != len(s) {
 		return "", false
 	}
