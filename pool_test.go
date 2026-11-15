@@ -5,10 +5,14 @@ import (
 	"encoding/json/jsontext"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"weak"
 
+	"google.golang.org/protobuf/types/known/anypb"
+
 	testpb "github.com/protolayer/jsonwire/internal/gen/google/protobuf"
+	"github.com/protolayer/jsonwire/internal/testutil"
 )
 
 // TestPutEncodeStateBuffer checks the buffer policy: a large buffer stays while
@@ -176,4 +180,34 @@ func TestReleaseDecodeState(t *testing.T) {
 		t.Error("decode state keeps the input after release")
 	}
 	runtime.KeepAlive(state)
+}
+
+// TestSubDecoderPool checks that only sub-decoders that allow duplicate names
+// go into the pool. A decoder that checks for duplicate names keeps the names
+// it read, also after Reset.
+func TestSubDecoderPool(t *testing.T) {
+	// Not parallel: the test replaces the pool.
+	defer func() { subDecoderPool = sync.Pool{} }()
+	input := `{"@type":"type.googleapis.com/google.protobuf.Struct","value":{"` +
+		strings.Repeat("k", 1<<20) + `":null}}`
+
+	subDecoderPool = sync.Pool{}
+	if err := UnmarshalDecode(jsontext.NewDecoder(strings.NewReader(input)), new(anypb.Any)); err != nil {
+		t.Fatal(err)
+	}
+	if subDecoderPool.Get() != nil {
+		t.Error("a sub-decoder that checks for duplicate names went into the pool")
+	}
+
+	// The race detector drops some values that go into a pool.
+	if testutil.RaceEnabled {
+		return
+	}
+	subDecoderPool = sync.Pool{}
+	if err := Unmarshal([]byte(input), new(anypb.Any)); err != nil {
+		t.Fatal(err)
+	}
+	if subDecoderPool.Get() == nil {
+		t.Error("a sub-decoder that allows duplicate names did not go into the pool")
+	}
 }

@@ -157,6 +157,7 @@ func (o UnmarshalOptions) UnmarshalDecode(dec *jsontext.Decoder, m proto.Message
 		opts:       o,
 		checkUTF8:  allowInvalidUTF8,
 		subOptions: subDecoderOptions[boolIndex(allowDuplicateNames)][boolIndex(allowInvalidUTF8)],
+		poolSub:    allowDuplicateNames,
 	}
 	if err := d.unmarshalMessage(m.ProtoReflect(), false); err != nil {
 		return wrapError(err)
@@ -213,6 +214,10 @@ type decoder struct {
 	// subOptions are the options for sub-decoders. They copy only the syntax
 	// options that matter, not internal options of encoding/json.
 	subOptions jsontext.Options
+	// poolSub is true if sub-decoders can come from the pool. A decoder that
+	// checks for duplicate names keeps a copy of the names it read, also
+	// after Reset, so it does not go into the pool.
+	poolSub bool
 }
 
 // subDecoderOptions has the sub-decoder options for each combination of
@@ -406,11 +411,15 @@ func unsafeString(b []byte) string {
 // read from d.dec while it uses the sub-decoder, because raw can refer to the
 // memory of d.dec. The caller must call putSubDecoder when it is done.
 //
-// The jsontext.Decoder comes from a pool. This is safe because no string view
-// lives longer than the sub-decoder: a value that is kept is always a copy.
+// The jsontext.Decoder can come from a pool. This is safe because no string
+// view lives longer than the sub-decoder: a value that is kept is always a
+// copy.
 func (d decoder) subDecoder(raw []byte) decoder {
 	sub := d
-	dec, _ := subDecoderPool.Get().(*jsontext.Decoder)
+	var dec *jsontext.Decoder
+	if d.poolSub {
+		dec, _ = subDecoderPool.Get().(*jsontext.Decoder)
+	}
 	if dec == nil {
 		dec = jsontext.NewDecoder(bytes.NewBuffer(raw), d.subOptions)
 	} else {
@@ -425,6 +434,9 @@ var subDecoderPool sync.Pool
 // putSubDecoder returns the jsontext.Decoder of sub to the pool, without the
 // reference to its input.
 func putSubDecoder(sub decoder) {
+	if !sub.poolSub {
+		return
+	}
 	sub.dec.Reset(emptyBuffer)
 	subDecoderPool.Put(sub.dec)
 }
