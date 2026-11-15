@@ -954,3 +954,33 @@ func TestAnyValuesAreOwned(t *testing.T) {
 		}
 	}
 }
+
+// TestDuplicateNamesInAny checks that a decoder that checks for duplicate names
+// rejects them at each depth of an Any value, and that a decoder that allows
+// them gives the same result as protojson.
+func TestDuplicateNamesInAny(t *testing.T) {
+	t.Parallel()
+	const prefix = `{"optionalAny":{"@type":"type.googleapis.com/`
+	for _, input := range []string{
+		prefix + `google.protobuf.Struct","value":{"a":1,"a":2}}}`,
+		prefix + `google.protobuf.Struct","value":{"a":{"b":1,"b":2}}}}`,
+		prefix + `google.protobuf.Value","value":[{"a":1,"a":2}]}}`,
+		prefix + `protobuf_test_messages.proto3.TestAllTypesProto3","optionalStruct":{"a":1,"a":2}}}`,
+		prefix + `google.protobuf.Any","value":{"@type":"type.googleapis.com/google.protobuf.Struct",` +
+			`"value":{"a":1,"a":2}}}}`,
+		prefix + `protobuf_test_messages.proto3.TestAllTypesProto3","unknown":1,"unknown":2}}`,
+	} {
+		opts := jsonwire.UnmarshalOptions{DiscardUnknown: true}
+		strict := jsontext.NewDecoder(strings.NewReader(input))
+		if err := opts.UnmarshalDecode(strict, new(testpb.TestAllTypesProto3)); err == nil {
+			t.Errorf("%s: strict decoder: want error", input)
+		}
+		var want, got testpb.TestAllTypesProto3
+		wantErr := protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal([]byte(input), &want)
+		lenient := jsontext.NewDecoder(strings.NewReader(input), jsontext.AllowDuplicateNames(true))
+		gotErr := opts.UnmarshalDecode(lenient, &got)
+		if (wantErr == nil) != (gotErr == nil) || (gotErr == nil && !proto.Equal(&got, &want)) {
+			t.Errorf("%s: lenient decoder: got %v, %v; protojson: %v, %v", input, &got, gotErr, &want, wantErr)
+		}
+	}
+}

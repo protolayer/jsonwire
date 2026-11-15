@@ -3,6 +3,7 @@ package jsonwire
 import (
 	"bytes"
 	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"runtime"
 	"strings"
 	"sync"
@@ -12,7 +13,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	testpb "github.com/protolayer/jsonwire/internal/gen/google/protobuf"
-	"github.com/protolayer/jsonwire/internal/testutil"
 )
 
 // TestPutEncodeStateBuffer checks the buffer policy: a large buffer stays while
@@ -182,32 +182,37 @@ func TestReleaseDecodeState(t *testing.T) {
 	runtime.KeepAlive(state)
 }
 
-// TestSubDecoderPool checks that only sub-decoders that allow duplicate names
-// go into the pool. A decoder that checks for duplicate names keeps the names
-// it read, also after Reset.
-func TestSubDecoderPool(t *testing.T) {
+// TestSubDecoderOptions checks that sub-decoders allow duplicate names. A
+// decoder that checks for duplicate names keeps the names it read, also after
+// Reset, so a pooled decoder would keep them.
+func TestSubDecoderOptions(t *testing.T) {
+	t.Parallel()
+	for i, opts := range subDecoderOptions {
+		if allow, _ := jsonv2.GetOption(opts, jsontext.AllowDuplicateNames); !allow {
+			t.Errorf("subDecoderOptions[%d] checks for duplicate names", i)
+		}
+		if allow, _ := jsonv2.GetOption(opts, jsontext.AllowInvalidUTF8); allow != (i == 1) {
+			t.Errorf("subDecoderOptions[%d]: AllowInvalidUTF8 is %v", i, allow)
+		}
+	}
+}
+
+// TestSubDecoderReleasesInput checks that a pooled sub-decoder does not keep
+// the input of the caller alive.
+func TestSubDecoderReleasesInput(t *testing.T) {
 	// Not parallel: the test replaces the pool.
 	defer func() { subDecoderPool = sync.Pool{} }()
-	input := `{"@type":"type.googleapis.com/google.protobuf.Struct","value":{"` +
-		strings.Repeat("k", 1<<20) + `":null}}`
-
 	subDecoderPool = sync.Pool{}
-	if err := UnmarshalDecode(jsontext.NewDecoder(strings.NewReader(input)), new(anypb.Any)); err != nil {
+	input := []byte(`{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":1}`)
+	ref := weak.Make(&input[0])
+	if err := Unmarshal(input, new(anypb.Any)); err != nil {
 		t.Fatal(err)
 	}
-	if subDecoderPool.Get() != nil {
-		t.Error("a sub-decoder that checks for duplicate names went into the pool")
+	dec, _ := subDecoderPool.Get().(*jsontext.Decoder)
+	input = nil
+	runtime.GC()
+	if ref.Value() != nil {
+		t.Error("a pooled sub-decoder keeps the input")
 	}
-
-	// The race detector drops some values that go into a pool.
-	if testutil.RaceEnabled {
-		return
-	}
-	subDecoderPool = sync.Pool{}
-	if err := Unmarshal([]byte(input), new(anypb.Any)); err != nil {
-		t.Fatal(err)
-	}
-	if subDecoderPool.Get() == nil {
-		t.Error("a sub-decoder that allows duplicate names did not go into the pool")
-	}
+	runtime.KeepAlive(dec)
 }
