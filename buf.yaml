@@ -1,0 +1,12 @@
+# The files in proto/ are test inputs only, so this module does not lint them
+# or check them for breaking changes:
+#
+#   - proto/conformance, proto/editions, and proto/google are copies of the
+#     upstream conformance test protos from protocolbuffers/protobuf v31.1.
+#     The proto2 files have one change: the message_set_wire_format option is
+#     removed, so that code generation does not need the protolegacy build
+#     tag.
+#   - proto/jsonwire has test protos of this module.
+version: v2
+modules:
+  - path: proto

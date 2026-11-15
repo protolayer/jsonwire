@@ -1,0 +1,205 @@
+{
+  "optionalInt32": -667173863,
+  "optionalUint32": 3280,
+  "optionalSint64": "263",
+  "optionalFixed32": 3002995092,
+  "optionalFixed64": "18437736874454810623",
+  "optionalFloat": "NaN",
+  "optionalDouble": 8.830647668673142e-7,
+  "optionalForeignEnum": "FOREIGN_BAZ",
+  "optionalAliasedEnum": "ALIAS_BAZ",
+  "optionalCord": "\u0000\u0001\u001f",
+  "repeatedSint64": [
+    "9223372036854775807",
+    "9223372036854775807"
+  ],
+  "repeatedFixed32": [
+    558207485,
+    2875950361
+  ],
+  "repeatedSfixed32": [
+    0
+  ],
+  "repeatedSfixed64": [
+    "3946"
+  ],
+  "repeatedDouble": [
+    3.408279918654752e-26,
+    -0,
+    "-Infinity"
+  ],
+  "repeatedBool": [
+    false
+  ],
+  "repeatedString": [
+    "ҡm8Zd8"
+  ],
+  "repeatedForeignMessage": [
+    {
+      "c": 2679
+    },
+    {},
+    {}
+  ],
+  "repeatedForeignEnum": [
+    "FOREIGN_FOO",
+    "FOREIGN_BAZ"
+  ],
+  "repeatedStringPiece": [
+    "fooBar",
+    "ꈯ轆:\u0007",
+    ""
+  ],
+  "packedInt32": [
+    -619074919,
+    42,
+    597137874
+  ],
+  "packedInt64": [
+    "15996923811401",
+    "65866340",
+    "1655948713092189"
+  ],
+  "packedUint64": [
+    "18446744071562067968"
+  ],
+  "packedSint64": [
+    "24283132544147927",
+    "9223372036854775807",
+    "29764265191681771"
+  ],
+  "packedFixed32": [
+    0
+  ],
+  "packedFloat": [
+    123456790,
+    9007199000000000,
+    1.3744737e-14
+  ],
+  "packedBool": [
+    false,
+    true
+  ],
+  "packedNestedEnum": [
+    "BAZ"
+  ],
+  "unpackedUint32": [
+    0,
+    2147483647
+  ],
+  "unpackedUint64": [
+    "4059411762",
+    "9223372036854775807"
+  ],
+  "unpackedFixed32": [
+    185544352,
+    1587647113,
+    9176612
+  ],
+  "unpackedSfixed32": [
+    -1,
+    51609,
+    -1
+  ],
+  "unpackedSfixed64": [
+    "42"
+  ],
+  "unpackedFloat": [
+    -49811326000000000,
+    331898.6
+  ],
+  "unpackedDouble": [
+    3.4028234663852886e+38,
+    -4.110284212461872e+37,
+    123456789
+  ],
+  "mapInt32Int32": {
+    "42": 793026605,
+    "2147483647": 1
+  },
+  "mapInt64Int64": {
+    "2": "28247631466",
+    "9223372036854775807": "6207745"
+  },
+  "mapUint32Uint32": {
+    "2485631206": 0
+  },
+  "mapSint32Sint32": {
+    "1": -1,
+    "994913183": 0
+  },
+  "mapSint64Sint64": {
+    "-9007199254740993": "938655143601495",
+    "1": "-2147483648",
+    "9123429": "-9007199254740993"
+  },
+  "mapFixed64Fixed64": {
+    "33090957500": "9223372036854775808",
+    "9007199254740993": "1"
+  },
+  "mapInt32Float": {
+    "12": 3.5330983e-15
+  },
+  "mapStringBytes": {
+    "1.5s": "4JD9E4E=",
+    "é́": "TjsU5/4qnPM="
+  },
+  "mapStringForeignMessage": {
+    "Infinity": {
+      "c": -1
+    }
+  },
+  "oneofUint32": 2361861410,
+  "optionalBoolWrapper": false,
+  "optionalInt32Wrapper": 1370793562,
+  "optionalInt64Wrapper": "1",
+  "optionalUint32Wrapper": 0,
+  "optionalFloatWrapper": 0,
+  "optionalBytesWrapper": "CAs=",
+  "repeatedInt64Wrapper": [
+    "358038370548214790",
+    "-2147483648"
+  ],
+  "repeatedUint64Wrapper": [
+    "0",
+    "0"
+  ],
+  "repeatedFloatWrapper": [
+    -7.746236e+28,
+    0.001109694,
+    4.3160904e-28
+  ],
+  "repeatedDoubleWrapper": [
+    1.7976931348623157e+308
+  ],
+  "repeatedStringWrapper": [
+    "S",
+    "emoji 🙂"
+  ],
+  "optionalDuration": "192476474091.988502153s",
+  "optionalTimestamp": "8356-11-07T20:14:59.451Z",
+  "optionalFieldMask": "fooBar,foo",
+  "optionalStruct": {},
+  "optionalAny": {},
+  "repeatedTimestamp": [
+    "6098-10-07T03:43:13.087902887Z",
+    "2155-12-31T14:15:13Z"
+  ],
+  "repeatedFieldmask": [
+    ""
+  ],
+  "repeatedListValue": [
+    [
+      "{}",
+      2.4940059016745133e-23
+    ],
+    []
+  ],
+  "fieldName4": 2147483647,
+  "field0name5": -1,
+  "fieldName7": -1590775132,
+  "FieldName8": 2147483647,
+  "FieldName13": 847684333,
+  "FieldName14": 11852,
+  "FieldName18": 2962
+}

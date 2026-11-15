@@ -1,0 +1,53 @@
+edition = "2023";
+
+package jsonwire.test;
+
+// Editions covers the editions features that the conformance test messages do
+// not cover: required fields, closed enums, explicit and implicit presence,
+// default values, delimited and group-like fields, json_name, and extensions.
+message Editions {
+  enum Open {
+    OPEN_UNSPECIFIED = 0;
+    OPEN_A = 1;
+  }
+
+  enum Closed {
+    option features.enum_type = CLOSED;
+
+    CLOSED_A = 1;
+    CLOSED_B = 2;
+  }
+
+  message Group {
+    int32 value = 1;
+    string name = 2;
+  }
+
+  int32 required_int32 = 1 [features.field_presence = LEGACY_REQUIRED];
+  Group required_message = 2 [features.field_presence = LEGACY_REQUIRED];
+  int32 explicit_int32 = 3;
+  int32 implicit_int32 = 4 [features.field_presence = IMPLICIT];
+  string default_string = 5 [default = "hello"];
+  Closed closed_enum = 6;
+  repeated Closed repeated_closed = 7;
+  Open open_enum = 8;
+  Group delimited = 9 [features.message_encoding = DELIMITED];
+  repeated Group repeated_delimited = 10 [features.message_encoding = DELIMITED];
+  map<int32, Group> map_group = 11;
+  string custom_json = 12 [json_name = "customJSON"];
+  oneof choice {
+    int32 choice_int = 13;
+    Group choice_group = 14;
+  }
+  Editions recursive = 15;
+  // A group-like field: delimited, and named like its type.
+  Group group = 16 [features.message_encoding = DELIMITED];
+
+  extensions 100 to 199;
+}
+
+extend Editions {
+  int32 ext_int32 = 100;
+  Editions.Group ext_group = 101 [features.message_encoding = DELIMITED];
+  repeated string ext_strings = 102;
+}

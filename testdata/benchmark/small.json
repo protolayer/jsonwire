@@ -1,0 +1,16 @@
+{
+  "optionalInt32": 42,
+  "optionalInt64": "-7",
+  "optionalString": "hello",
+  "optionalBytes": "AQID",
+  "optionalNestedEnum": "BAR",
+  "repeatedDouble": [
+    1.5,
+    -0.25
+  ],
+  "mapStringString": {
+    "a": "1",
+    "b": "2"
+  },
+  "oneofString": "choice"
+}

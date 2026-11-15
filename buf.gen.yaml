@@ -1,0 +1,14 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/protolayer/jsonwire/internal/gen
+plugins:
+  # Build protoc-gen-go from the tool directive in go.mod, so that its version
+  # matches the protobuf runtime.
+  - local: ["go", "tool", "protoc-gen-go"]
+    out: internal/gen
+    opt:
+      - paths=source_relative
+clean: true
