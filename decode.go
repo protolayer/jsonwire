@@ -192,9 +192,13 @@ func getDecodeState(b []byte) *decodeState {
 }
 
 func putDecodeState(state *decodeState) {
-	// Drop the reference to the caller's input.
-	state.dec.Reset(emptyBuffer)
+	state.release()
 	decodeStatePool.Put(state)
+}
+
+// release drops the reference to the caller's input.
+func (state *decodeState) release() {
+	state.dec.Reset(emptyBuffer)
 }
 
 // decoder holds the state for one call. Methods use a value receiver, so that

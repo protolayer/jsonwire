@@ -5,6 +5,10 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/protolayer/jsonwire"
 	"github.com/protolayer/jsonwire/internal/gen/conformance/test_protos"
@@ -185,6 +189,14 @@ var edgeInputs = []string{
 	`{"optionalAny":{"@type":"google.protobuf.Duration","value":"1s"}}`,
 	`{"optionalAny":{"@type":"/google.protobuf.Duration","value":"1s"}}`,
 	`{"optionalAny":{"unknown":{"deep":[[[]]]}}}`,
+	// The depth check of an Any without @type, which DiscardUnknown discards.
+	`{"optionalAny":{"a":[]}}`, `{"optionalAny":{"a":[[]]}}`, `{"optionalAny":{"a":[[[]]]}}`,
+	`{"optionalAny":{"a":[[[[]]]]}}`,
+	// Numbers with fractions and exponents for integer and float fields.
+	`{"optionalDouble":"1.25"}`, `{"optionalInt32":"1.00"}`, `{"optionalInt32":10.5e-1}`,
+	`{"optionalInt32":15e-1}`, `{"optionalInt32":150e-1}`, `{"optionalInt64":"1.50e1"}`,
+	// Duplicate unknown names, which DiscardUnknown accepts.
+	`{"unknown":1,"unknown":2}`, `{"unknown":{"a":1,"a":2}}`,
 	`{"optionalAny":{"@type":"type.googleapis.com/protobuf_test_messages.proto3.TestAllTypesProto3","optionalInt32":"x"}}`,
 }
 
@@ -285,6 +297,41 @@ func TestHugeExponents(t *testing.T) {
 			for _, c := range unmarshalCases {
 				checkUnmarshal(t, []byte(input), newMessage, c)
 			}
+		}
+	}
+}
+
+// invalidMessages are messages that ProtoJSON cannot represent. Marshal must
+// return an error for each of them, the same as protojson.
+func invalidMessages() []proto.Message {
+	return []proto.Message{
+		&durationpb.Duration{Seconds: 315576000001},
+		&durationpb.Duration{Seconds: -315576000001},
+		&durationpb.Duration{Nanos: 1000000000},
+		&durationpb.Duration{Seconds: 1, Nanos: -1},
+		&durationpb.Duration{Seconds: 1, Nanos: -1000000000},
+		&timestamppb.Timestamp{Nanos: -1},
+		&timestamppb.Timestamp{Nanos: 1000000000},
+		&timestamppb.Timestamp{Seconds: 253402300800},
+		&timestamppb.Timestamp{Seconds: -62135596801},
+		&fieldmaskpb.FieldMask{Paths: []string{"a b"}},
+		&fieldmaskpb.FieldMask{Paths: []string{""}},
+		&fieldmaskpb.FieldMask{Paths: []string{"aB"}},
+		&anypb.Any{Value: []byte{1}},
+		&anypb.Any{TypeUrl: "type.googleapis.com/google.protobuf.Duration", Value: []byte{0xff}},
+		&testpb.TestAllTypesProto3{OptionalDuration: &durationpb.Duration{Nanos: 1000000000}},
+		&testpb.TestAllTypesProto3{RepeatedTimestamp: []*timestamppb.Timestamp{{Nanos: -1}}},
+	}
+}
+
+func TestInvalidMessages(t *testing.T) {
+	t.Parallel()
+	for _, m := range invalidMessages() {
+		for _, c := range marshalCases {
+			checkMarshal(t, m, c)
+		}
+		if _, err := jsonwire.Marshal(m); err == nil {
+			t.Errorf("Marshal(%v): want error", m)
 		}
 	}
 }
